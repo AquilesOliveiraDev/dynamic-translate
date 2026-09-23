@@ -1,0 +1,97 @@
+{
+  "name": "dynamic-translate",
+  "version": "1.0.0",
+  "description": "A high-performance, zero-lockin universal dynamic translation engine. Headless, type-safe, and automated i18n core with support for LibreTranslate, Google Translate, React, Next.js, Vue, Svelte, Angular, and Node.js.",
+  "homepage": "https://github.com/AquilesOliveiraDev/dynamic-translate#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AquilesOliveiraDev/dynamic-translate.git"
+  },
+  "bugs": {
+    "url": "https://github.com/AquilesOliveiraDev/dynamic-translate/issues"
+  },
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./client": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "dynamic-translate": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "docker-compose.yml",
+    "docker-run.sh",
+    ".env.example",
+    "README.md",
+    "README.pt-BR.md",
+    "README.es.md",
+    "README.zh.md",
+    "CONTRIBUTING.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "build:types": "tsc --emitDeclarationOnly",
+    "dev": "tsup --watch",
+    "extract": "ts-node src/cli.ts extract",
+    "translate": "ts-node src/cli.ts translate",
+    "sync": "ts-node src/cli.ts sync",
+    "docker": "ts-node src/cli.ts docker",
+    "typecheck": "tsc --noEmit",
+    "test": "jest",
+    "prepublishOnly": "npm run test && npm run build"
+  },
+  "keywords": [
+    "i18n",
+    "internationalization",
+    "localization",
+    "translate",
+    "translation",
+    "libretranslate",
+    "google-translate",
+    "extraction",
+    "regex-extraction",
+    "typescript",
+    "react",
+    "vue",
+    "angular",
+    "svelte",
+    "nextjs",
+    "nodejs",
+    "universal",
+    "headless",
+    "type-safe",
+    "docker",
+    "dynamic-translate"
+  ],
+  "author": "Wert Solutions",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@vitalets/google-translate-api": "^9.2.1",
+    "dotenv": "^16.4.7",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.14",
+    "@types/node": "^20.17.19",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "ts-node": "^10.9.2",
+    "tsup": "^8.3.6",
+    "typescript": "^5.7.3"
+  }
+}
