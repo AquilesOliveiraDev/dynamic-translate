@@ -69,6 +69,11 @@ export interface DynamicTranslateConfig {
    * Padrão: 'libretranslate'
    */
   provider?: TranslationProvider
+  /**
+   * Timeout em milissegundos para requisições de tradução.
+   * Padrão: 120000 (120s) para LibreTranslate local, 30000 (30s) para APIs remotas.
+   */
+  timeoutMs?: number
 }
 
 export interface ExtractionResult {
@@ -93,6 +98,7 @@ export interface TranslationOptions {
   languages?: string[]
   batchSize?: number
   concurrency?: number
+  timeoutMs?: number
 }
 
 export interface TranslateItemParams {
@@ -103,6 +109,7 @@ export interface TranslateItemParams {
   apiUrl?: string
   apiKey?: string
   googleApiKey?: string
+  timeoutMs?: number
 }
 
 export interface TranslateBatchParams {
@@ -113,4 +120,5 @@ export interface TranslateBatchParams {
   apiUrl?: string
   apiKey?: string
   googleApiKey?: string
+  timeoutMs?: number
 }

@@ -9,7 +9,7 @@ if [ -f "$ENV_FILE" ]; then
 fi
 
 PORT="${LIBRETRANSLATE_PORT:-5000}"
-LANGS="${LANGS:-pt,pt-BR,en,es,it,zh,fr}"
+LANGS="${LANGS:-pt,en,es,it,zh,fr}"
 
 echo "🚀 Iniciando LibreTranslate no Docker..."
 echo "🌐 Porta: $PORT"
@@ -19,4 +19,5 @@ docker run -ti --rm \
   -p "${PORT}:5000" \
   -e "LT_LOAD_ONLY=${LANGS}" \
   -e "LT_UPDATE_MODELS=true" \
+  -e "PYTHONWARNINGS=ignore" \
   libretranslate/libretranslate

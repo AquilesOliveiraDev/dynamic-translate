@@ -52,7 +52,7 @@ Crie um arquivo `.env` na raiz do seu projeto:
 RULE=/\bt\('([^']+)'\)/g
 
 # Lista de idiomas desejados separados por vírgula
-LANGS=pt,pt-BR,en,es,it,zh,fr
+LANGS=pt,en,es,it,zh,fr
 
 # Idioma base para extração inicial (arquivo base gerado)
 BASE_LANG=pt-br

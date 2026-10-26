@@ -1,4 +1,4 @@
-import { parseRegexRule, normalizeLangCode, loadConfig } from '../src/config'
+import { parseRegexRule, normalizeLangCode, toLibreTranslateCode, loadConfig } from '../src/config'
 
 describe('Config Module', () => {
   test('parseRegexRule properly converts string regex with flags', () => {
@@ -18,6 +18,16 @@ describe('Config Module', () => {
     expect(normalizeLangCode('pt-br')).toBe('pt-BR')
     expect(normalizeLangCode('br')).toBe('pt-BR')
     expect(normalizeLangCode('en')).toBe('en')
+    expect(normalizeLangCode('zh-CN')).toBe('zh')
+  })
+
+  test('toLibreTranslateCode normalizes codes to 2-letter ISO standards', () => {
+    expect(toLibreTranslateCode('pt-BR')).toBe('pt')
+    expect(toLibreTranslateCode('pt')).toBe('pt')
+    expect(toLibreTranslateCode('zh-CN')).toBe('zh')
+    expect(toLibreTranslateCode('zh')).toBe('zh')
+    expect(toLibreTranslateCode('en-US')).toBe('en')
+    expect(toLibreTranslateCode('es')).toBe('es')
   })
 
   test('loadConfig loads custom options and fallback defaults', () => {

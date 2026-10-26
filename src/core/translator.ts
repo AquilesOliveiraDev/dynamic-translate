@@ -8,7 +8,7 @@ import {
   TranslateItemParams,
   TranslateBatchParams,
 } from '../types'
-import { loadConfig, normalizeLangCode } from '../config'
+import { loadConfig, normalizeLangCode, toLibreTranslateCode } from '../config'
 
 /**
  * Utilitário para dividir um array em blocos menores (chunks)
@@ -68,6 +68,23 @@ export async function checkProviderHealth(apiUrl: string): Promise<boolean> {
 /**
  * Traduz um lote de textos (Batch Translation)
  */
+async function callGoogleTranslate(text: string, from: string, to: string): Promise<string> {
+  const fn: any =
+    (translateModule as any).translate ||
+    (translateModule as any).default?.translate ||
+    (translateModule as any).default ||
+    translateModule
+  if (typeof fn !== 'function') {
+    return text
+  }
+  const target = to.toLowerCase() === 'zh' ? 'zh-CN' : to
+  const resp = await fn(text, {
+    from,
+    to: target,
+  })
+  return resp?.text || text
+}
+
 export async function translateBatch({
   texts,
   from,
@@ -76,6 +93,7 @@ export async function translateBatch({
   apiUrl = 'http://localhost:5000',
   apiKey = '',
   googleApiKey = '',
+  timeoutMs,
 }: TranslateBatchParams): Promise<string[]> {
   if (texts.length === 0) return []
 
@@ -84,20 +102,23 @@ export async function translateBatch({
 
   const isSame =
     normalizedFrom.toLowerCase() === normalizedTo.toLowerCase() ||
-    (normalizedFrom.toLowerCase().startsWith('pt') && normalizedTo.toLowerCase().startsWith('pt'))
+    toLibreTranslateCode(from) === toLibreTranslateCode(to)
 
   if (isSame) {
     return texts
   }
 
-  try {
-    if (provider === 'google') {
-      const gKey = googleApiKey || apiKey
-      if (gKey) {
-        // Google Cloud Translation API v2 oficial com suporte a lote
+  const effectiveTimeout =
+    timeoutMs ||
+    (apiUrl.includes('localhost') || apiUrl.includes('127.0.0.1') ? 120000 : 30000)
+
+  if (provider === 'google') {
+    const gKey = googleApiKey || apiKey
+    if (gKey) {
+      try {
         const endpoint = `https://translation.googleapis.com/language/translate/v2?key=${gKey}`
         const controller = new AbortController()
-        const timeout = setTimeout(() => controller.abort(), 12000)
+        const timer = setTimeout(() => controller.abort(), effectiveTimeout)
 
         const response = await fetch(endpoint, {
           method: 'POST',
@@ -110,7 +131,7 @@ export async function translateBatch({
             format: 'text',
           }),
         })
-        clearTimeout(timeout)
+        clearTimeout(timer)
 
         if (response.ok) {
           const data = (await response.json()) as {
@@ -121,43 +142,41 @@ export async function translateBatch({
             return results
           }
         }
+      } catch {
+        // Fallback para scraping
       }
-
-      // Fallback concorrente para scraping do Google
-      return await Promise.all(
-        texts.map(async (text) => {
-          try {
-            const resp = await translateModule.translate(text, {
-              from: normalizedFrom,
-              to: normalizedTo,
-            })
-            return resp.text || text
-          } catch {
-            return text
-          }
-        }),
-      )
     }
 
-    // LibreTranslate API com suporte nativo a array no campo 'q'
-    const endpoint = `${apiUrl.replace(/\/+$/, '')}/translate`
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 12000)
+    // Google scraping concorrente com pool para evitar rate-limit
+    return await asyncPool(5, texts, async (text) => {
+      try {
+        return await callGoogleTranslate(text, normalizedFrom, normalizedTo)
+      } catch {
+        return text
+      }
+    })
+  }
 
+  // LibreTranslate API com suporte nativo a array no campo 'q'
+  const endpoint = `${apiUrl.replace(/\/+$/, '')}/translate`
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), effectiveTimeout)
+
+  try {
     const response = await fetch(endpoint, {
       method: 'POST',
       signal: controller.signal,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         q: texts,
-        source: normalizedFrom,
-        target: normalizedTo,
+        source: toLibreTranslateCode(from),
+        target: toLibreTranslateCode(to),
         format: 'text',
         alternatives: 1,
         api_key: apiKey,
       }),
     })
-    clearTimeout(timeout)
+    clearTimeout(timer)
 
     if (response.ok) {
       const data = (await response.json()) as { translatedText?: string | string[] }
@@ -167,25 +186,26 @@ export async function translateBatch({
         return [data.translatedText]
       }
     }
-
-    // Fallback individual se a resposta em lote do LibreTranslate não for compatível
-    return await Promise.all(
-      texts.map(async (text) => {
-        return translateText({
-          text,
-          from,
-          to,
-          provider,
-          apiUrl,
-          apiKey,
-          googleApiKey,
-        })
-      }),
-    )
   } catch {
-    // Fallback item a item em caso de erro na requisição do lote
-    return texts.map((t) => t)
+    clearTimeout(timer)
   }
+
+  // Fallback individual item a item se a resposta em lote falhar ou der timeout
+  const fallbackResults: string[] = []
+  for (const text of texts) {
+    const res = await translateText({
+      text,
+      from,
+      to,
+      provider,
+      apiUrl,
+      apiKey,
+      googleApiKey,
+      timeoutMs: Math.min(30000, effectiveTimeout),
+    })
+    fallbackResults.push(res || text)
+  }
+  return fallbackResults
 }
 
 /**
@@ -199,13 +219,14 @@ export async function translateText({
   apiUrl = 'http://localhost:5000',
   apiKey = '',
   googleApiKey = '',
+  timeoutMs = 30000,
 }: TranslateItemParams): Promise<string> {
   const normalizedFrom = normalizeLangCode(from)
   const normalizedTo = normalizeLangCode(to)
 
   const isSame =
     normalizedFrom.toLowerCase() === normalizedTo.toLowerCase() ||
-    (normalizedFrom.toLowerCase().startsWith('pt') && normalizedTo.toLowerCase().startsWith('pt'))
+    toLibreTranslateCode(from) === toLibreTranslateCode(to)
 
   if (isSame) {
     return text
@@ -217,7 +238,7 @@ export async function translateText({
       if (gKey) {
         const endpoint = `https://translation.googleapis.com/language/translate/v2?key=${gKey}`
         const controller = new AbortController()
-        const timeout = setTimeout(() => controller.abort(), 8000)
+        const timer = setTimeout(() => controller.abort(), timeoutMs)
 
         const response = await fetch(endpoint, {
           method: 'POST',
@@ -230,7 +251,7 @@ export async function translateText({
             format: 'text',
           }),
         })
-        clearTimeout(timeout)
+        clearTimeout(timer)
 
         if (response.ok) {
           const data = (await response.json()) as {
@@ -240,16 +261,12 @@ export async function translateText({
         }
       }
 
-      const resp = await translateModule.translate(text, {
-        from: normalizedFrom,
-        to: normalizedTo,
-      })
-      return resp.text
+      return await callGoogleTranslate(text, normalizedFrom, normalizedTo)
     }
 
     const endpoint = `${apiUrl.replace(/\/+$/, '')}/translate`
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 8000)
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
 
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -257,14 +274,14 @@ export async function translateText({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         q: text,
-        source: normalizedFrom,
-        target: normalizedTo,
+        source: toLibreTranslateCode(from),
+        target: toLibreTranslateCode(to),
         format: 'text',
         alternatives: 1,
         api_key: apiKey,
       }),
     })
-    clearTimeout(timeout)
+    clearTimeout(timer)
 
     if (response.ok) {
       const data = (await response.json()) as { translatedText?: string }
@@ -371,13 +388,27 @@ export async function translateAll(
     let reusedCount = 0
     let exceptionCount = 0
 
+    const isBaseLangMatch =
+      normalizeLangCode(baseLang).toLowerCase() === normalizeLangCode(lang).toLowerCase() ||
+      toLibreTranslateCode(baseLang) === toLibreTranslateCode(lang)
+
     // Separa o que já está resolvido do que precisa ir para a API
     for (const key of baseKeys) {
+      const existing = existingTranslations[key]
+      // Considera reutilizado se existe e não está vazio.
+      // Se a língua de destino for diferente da língua base, mas o valor existente for IDÊNTICO
+      // à chave em português, consideramos que foi um fallback não traduzido anterior (erro/timeout)
+      // e colocamos na fila para re-traduzir, a menos que conste explicitamente no arquivo de exceções.
+      const isActuallyTranslated =
+        existing &&
+        existing.trim() !== '' &&
+        (isBaseLangMatch || existing !== key)
+
       if (exceptionObject[key]) {
         output[key] = exceptionObject[key]
         exceptionCount++
-      } else if (!override && existingTranslations[key] && existingTranslations[key].trim() !== '') {
-        output[key] = existingTranslations[key]
+      } else if (!override && isActuallyTranslated) {
+        output[key] = existing
         reusedCount++
       } else {
         keysToTranslate.push(key)
@@ -407,11 +438,15 @@ export async function translateAll(
           apiUrl,
           apiKey,
           googleApiKey,
+          timeoutMs: config.timeoutMs,
         })
 
         batch.forEach((key, index) => {
-          output[key] = translations[index] || key
-          translatedCount++
+          const translated = translations[index]
+          output[key] = translated || key
+          if (translated && (isBaseLangMatch || translated !== key)) {
+            translatedCount++
+          }
           processedTotal++
         })
 
